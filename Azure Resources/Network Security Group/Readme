@@ -1,0 +1,20 @@
+# Azure NSG Detection Use Cases
+
+Detection and assessment use cases for identifying risky Azure Network Security Group configurations using Microsoft Sentinel.
+
+## Prerequisites
+
+Enable the following NSG diagnostic log categories and send them to Microsoft Sentinel:
+
+- `NetworkSecurityGroupEvent`
+- `NetworkSecurityGroupRuleCounter`
+
+## Planned Use Cases
+
+- Any Source to Sensitive Management Port
+- Any Source to Database Service
+- Any-to-Any Inbound Rule
+- Temporary/Test Allow Rule
+- Rule Name and Configuration Mismatch
+- High-Risk Rule Actively Matching Traffic
+- Unrestricted Outbound Access
