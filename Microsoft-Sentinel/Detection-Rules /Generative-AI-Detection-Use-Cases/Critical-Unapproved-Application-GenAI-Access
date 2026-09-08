@@ -1,1 +1,138 @@
+# 🚨 Critical – Unapproved Application Connected to External Generative AI Service
 
+**Severity:** 🔴 Critical  
+**Platform:** Microsoft Sentinel / Defender XDR  
+**Data Source:** Microsoft Defender for Endpoint  
+**Table:** `DeviceNetworkEvents`  
+**Category:** Shadow AI / AI Governance / Compliance  
+**MITRE ATT&CK:** `T1071.001 – Web Protocols`  
+**Conditional MITRE ATT&CK:** `T1567 – Exfiltration Over Web Service`
+
+---
+
+## 📌 Description
+
+Detects non-browser applications, scripts, developer tools, command-line utilities, or custom processes communicating directly with external Generative AI platforms such as OpenAI, Claude, Gemini, Copilot, GitHub Copilot, and Perplexity.
+
+This may indicate Shadow AI usage, unauthorized AI integrations, compliance violations, or potential exposure of organizational data.
+
+---
+
+## 🎯 Why This Use Case?
+
+Generative AI services can be accessed through scripts, IDE extensions, automation tools, command-line utilities, and custom applications—not only through browsers.
+
+This use case helps identify:
+
+- Unauthorized AI usage
+- Direct AI API access
+- Shadow AI applications
+- Unapproved developer tools
+- Potential sensitive-data exposure
+- AI governance and compliance violations
+
+---
+
+## 🔎 KQL Detection
+
+```
+let ApprovedProcesses = dynamic([
+    "chrome.exe",
+    "msedge.exe",
+    "firefox.exe",
+    "safari",
+    "chatgpt",
+    "copilot.exe",
+    "outlook.exe",
+    "msedgewebview2.exe",
+    "google chrome helper",
+    "com.apple.webkit.networking"
+]);
+
+DeviceNetworkEvents
+| where RemoteUrl has_any (
+    "openai.com",
+    "api.openai.com",
+    "openai.azure.com",
+    "copilot.microsoft.com",
+    "claude.ai",
+    "anthropic.com",
+    "gemini.google.com",
+    "ai.google.com",
+    "perplexity.ai",
+    "api.githubcopilot.com",
+    "api.individual.githubcopilot.com"
+)
+| extend ProcName = tolower(InitiatingProcessFileName)
+| where isnotempty(ProcName)
+| where ProcName !in (ApprovedProcesses)
+| project
+    Timestamp,
+    DeviceName,
+    InitiatingProcessAccountName,
+    InitiatingProcessFileName,
+    InitiatingProcessCommandLine,
+    RemoteUrl,
+    RemoteIP,
+    RemotePort
+| order by Timestamp desc
+```
+
+---
+
+## 🛡️ MITRE ATT&CK Mapping
+
+**T1071.001 – Application Layer Protocol: Web Protocols**
+
+External AI services and APIs commonly communicate using HTTP/HTTPS.
+
+**Conditional: T1567 – Exfiltration Over Web Service**
+
+Use this mapping only if investigation confirms that sensitive or organizational data was transferred to the external AI platform.
+
+---
+
+## 🔍 Investigation
+
+- Identify the user and device
+- Review the initiating process
+- Review the command line
+- Identify the AI service accessed
+- Validate whether the application is approved
+- Check for possible sensitive-data exposure
+
+---
+
+## ✅ Recommendations
+
+- Validate whether the AI service is approved
+- Validate whether the initiating application is authorized
+- Investigate possible data exposure
+- Block unauthorized AI services where required
+- Restrict unauthorized applications or scripts
+- Review DLP and endpoint security controls
+- Maintain approved AI application and domain allowlists
+- Align enforcement with organizational AI governance policy
+
+---
+
+## 🟢 Whitelisting / Tuning
+
+Approved applications can be added to the allowlist to reduce false positives.
+
+Examples include:
+
+- Approved browsers
+- Approved AI clients
+- Approved developer tools
+- Approved IDE extensions
+- Approved API integrations
+- Approved service accounts
+
+Avoid hard-coding individual usernames or device names unless there is a documented business requirement.
+
+---
+
+## ⚠️ Note
+
+Communication with an external AI service alone does not confirm malicious activity or data exfiltration. Findings should be validated against the organization's approved AI usage and compliance policies.
