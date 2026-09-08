@@ -1,1 +1,72 @@
+# 🚨 Critical – Unapproved Application Connected to External Generative AI Service
 
+**Severity:** 🔴 Critical  
+**Platform:** 🔵 Microsoft Sentinel / Defender XDR  
+**Data Source:** Microsoft Defender for Endpoint  
+**Table:** `DeviceNetworkEvents`  
+**Category:** 🟣 Shadow AI / AI Governance / Compliance  
+**MITRE ATT&CK:** 🟠 T1071.001 – Web Protocols  
+
+---
+
+## 📌 Description
+
+Detects non-browser applications, scripts, developer tools, or command-line utilities communicating with external Generative AI services such as OpenAI, Claude, Gemini, Copilot, GitHub Copilot, and Perplexity.
+
+This may indicate unauthorized **Shadow AI usage** or potential exposure of organizational data.
+
+---
+
+## 🎯 Use Case
+
+Identify applications communicating with external AI services outside the organization's approved application list.
+
+Examples:
+
+```text
+python.exe      -> api.openai.com
+powershell.exe  -> api.openai.com
+node.exe        -> anthropic.com
+curl.exe        -> api.openai.com
+code.exe        -> claude.ai
+
+---
+
+##🔎 KQL Detection
+
+let ApprovedProcesses = dynamic([
+    "chrome.exe",
+    "msedge.exe",
+    "firefox.exe",
+    "safari",
+    "chatgpt",
+    "copilot.exe",
+    "outlook.exe",
+    "msedgewebview2.exe"
+]);
+
+DeviceNetworkEvents
+| where RemoteUrl has_any (
+    "openai.com",
+    "openai.azure.com",
+    "copilot.microsoft.com",
+    "claude.ai",
+    "anthropic.com",
+    "gemini.google.com",
+    "perplexity.ai",
+    "api.githubcopilot.com",
+    "api.individual.githubcopilot.com"
+)
+| extend ProcName = tolower(InitiatingProcessFileName)
+| where isnotempty(ProcName)
+| where ProcName !in (ApprovedProcesses)
+| project
+    Timestamp,
+    DeviceName,
+    InitiatingProcessAccountName,
+    InitiatingProcessFileName,
+    InitiatingProcessCommandLine,
+    RemoteUrl,
+    RemoteIP,
+    RemotePort
+| order by Timestamp desc
