@@ -1,1 +1,92 @@
+let MemoryThreshold = 90.0;
+let DetectionWindow = 15m;
+let ProcessSampleInterval = 5m;
 
+// ------------------------------------------------------------
+// 1. Servers averaging >90% memory during the last 15 minutes
+// ------------------------------------------------------------
+let HighMemory =
+    Perf
+    | where TimeGenerated > ago(DetectionWindow)
+    | where CounterName == "% Committed Bytes In Use"
+    | summarize
+        ServerMemoryPercent = round(avg(CounterValue), 2),
+        MemoryPeakPercent = round(max(CounterValue), 2)
+        by Computer
+    | where ServerMemoryPercent > MemoryThreshold;
+
+// ------------------------------------------------------------
+// 2. Process-level private working set
+// ------------------------------------------------------------
+let ProcessSamples =
+    Perf
+    | where TimeGenerated > ago(DetectionWindow)
+    | where CounterName == "Working Set - Private"
+    | where InstanceName !in ("_Total", "Idle")
+    | extend Process = replace_regex(InstanceName, @"#\d+$", "")
+    | summarize
+        ProcessBytes = sum(CounterValue)
+        by
+            Computer,
+            Process,
+            SampleTime = bin(TimeGenerated, ProcessSampleInterval);
+
+// ------------------------------------------------------------
+// 3. Average and peak memory for every process
+// ------------------------------------------------------------
+let ProcessStats =
+    ProcessSamples
+    | summarize
+        AvgMemoryMB = round(avg(ProcessBytes) / 1024 / 1024, 2),
+        PeakMemoryMB = round(max(ProcessBytes) / 1024 / 1024, 2)
+        by Computer, Process;
+
+// ------------------------------------------------------------
+// 4. Rank processes separately for each server
+// ------------------------------------------------------------
+let RankedProcesses =
+    ProcessStats
+    | sort by Computer asc, AvgMemoryMB desc
+    | serialize
+    | extend Rank = row_number(
+        1,
+        prev(Computer) != Computer
+    )
+    | where Rank <= 10
+    | extend ProcessDetail = strcat(
+        Rank,
+        ". ",
+        Process,
+        " - Avg: ",
+        tostring(AvgMemoryMB),
+        " MB | Peak: ",
+        tostring(PeakMemoryMB),
+        " MB"
+    );
+
+// ------------------------------------------------------------
+// 5. Put Top 10 into one field per server
+// ------------------------------------------------------------
+let TopProcesses =
+    RankedProcesses
+    | sort by Computer asc, Rank asc
+    | summarize
+        Top10Processes = strcat_array(
+            make_list(ProcessDetail, 10),
+            " || "
+        )
+        by Computer;
+
+// ------------------------------------------------------------
+// 6. Final alert result
+// One row = one affected server
+// ------------------------------------------------------------
+HighMemory
+| join kind=leftouter TopProcesses on Computer
+| project
+    TimeGenerated = now(),
+    Computer,
+    ServerMemoryPercent,
+    MemoryPeakPercent,
+    Top10Processes
+| order by ServerMemoryPercent desc
